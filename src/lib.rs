@@ -67,7 +67,7 @@ impl<T, C> PResultTrait<T, C> for PResult<T, C> {
     fn lift_invalid_input(self) -> PResult<T, C> {
         self.map_err(|e| match e {
             PError::InvalidInput { msg } => PError::PermanentFailure {
-                msg: format!("InvalidInput: {}", msg),
+                msg: format!("InvalidInput: {msg}"),
             },
             another_error => another_error,
         })
@@ -187,7 +187,7 @@ mod tests {
 
     impl Display for TestRuntimeErrorCode {
         fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-            write!(f, "{:?}", self)
+            write!(f, "{self:?}")
         }
     }
 
