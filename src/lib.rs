@@ -1,9 +1,9 @@
-//! PError enum with helper functions.
+//! Error enum with helper functions.
 //!
 //! # Examples
 //!
 //! ```ignore
-//! fn foo(x: u32) -> PResult<String> {
+//! fn foo(x: u32) -> Result<String, Error<RuntimeErrorCode>> {
 //!     if x <= 10 {
 //!         return Err(invalid_input("x must be greater than 10"));
 //!     }
@@ -16,7 +16,7 @@
 use std::fmt::{Debug, Display};
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
-pub enum PError<C> {
+pub enum Error<C> {
     /// Invalid input.
     /// Consider fixing the input and retrying the request.
     #[error("InvalidInput: {msg}")]
@@ -33,24 +33,22 @@ pub enum PError<C> {
     PermanentFailure { msg: String },
 }
 
-pub fn invalid_input<E: ToString, C: Display + Debug + Eq>(e: E) -> PError<C> {
-    PError::InvalidInput { msg: e.to_string() }
+pub fn invalid_input<E: ToString, C: Display + Debug + Eq>(e: E) -> Error<C> {
+    Error::InvalidInput { msg: e.to_string() }
 }
 
-pub fn runtime_error<E: ToString, C: Display + Debug + Eq>(code: C, e: E) -> PError<C> {
-    PError::RuntimeError {
+pub fn runtime_error<E: ToString, C: Display + Debug + Eq>(code: C, e: E) -> Error<C> {
+    Error::RuntimeError {
         code,
         msg: e.to_string(),
     }
 }
 
-pub fn permanent_failure<E: ToString, C: Display + Debug + Eq>(e: E) -> PError<C> {
-    PError::PermanentFailure { msg: e.to_string() }
+pub fn permanent_failure<E: ToString, C: Display + Debug + Eq>(e: E) -> Error<C> {
+    Error::PermanentFailure { msg: e.to_string() }
 }
 
-pub type PResult<T, C> = Result<T, PError<C>>;
-
-pub trait PResultTrait<T, C> {
+pub trait ResultTrait<T, C> {
     /// Lift `InvalidInput` error into `PermanentFailure`.
     ///
     /// Use the method when you want to propagate an error from an internal
@@ -58,31 +56,31 @@ pub trait PResultTrait<T, C> {
     /// Reasoning is that if you got `InvalidInput` it means you failed to
     /// validate the input for the internal function yourself, so for you it
     /// becomes `PermanentFailure`.
-    fn lift_invalid_input(self) -> PResult<T, C>;
+    fn lift_invalid_input(self) -> Result<T, Error<C>>;
 
-    fn prefix_error<M: ToString + 'static>(self, msg: M) -> PResult<T, C>;
+    fn prefix_error<M: ToString + 'static>(self, msg: M) -> Result<T, Error<C>>;
 }
 
-impl<T, C> PResultTrait<T, C> for PResult<T, C> {
-    fn lift_invalid_input(self) -> PResult<T, C> {
+impl<T, C> ResultTrait<T, C> for Result<T, Error<C>> {
+    fn lift_invalid_input(self) -> Result<T, Error<C>> {
         self.map_err(|e| match e {
-            PError::InvalidInput { msg } => PError::PermanentFailure {
+            Error::InvalidInput { msg } => Error::PermanentFailure {
                 msg: format!("InvalidInput: {msg}"),
             },
             another_error => another_error,
         })
     }
 
-    fn prefix_error<M: ToString + 'static>(self, prefix: M) -> PResult<T, C> {
+    fn prefix_error<M: ToString + 'static>(self, prefix: M) -> Result<T, Error<C>> {
         self.map_err(|e| match e {
-            PError::InvalidInput { msg } => PError::InvalidInput {
+            Error::InvalidInput { msg } => Error::InvalidInput {
                 msg: format!("{}: {}", prefix.to_string(), msg),
             },
-            PError::RuntimeError { code, msg } => PError::RuntimeError {
+            Error::RuntimeError { code, msg } => Error::RuntimeError {
                 code,
                 msg: format!("{}: {}", prefix.to_string(), msg),
             },
-            PError::PermanentFailure { msg } => PError::PermanentFailure {
+            Error::PermanentFailure { msg } => Error::PermanentFailure {
                 msg: format!("{}: {}", prefix.to_string(), msg),
             },
         })
@@ -90,72 +88,80 @@ impl<T, C> PResultTrait<T, C> for PResult<T, C> {
 }
 
 pub trait MapToError<T, E: ToString, C> {
-    fn map_to_invalid_input<M: ToString>(self, msg: M) -> PResult<T, C>;
-    fn map_to_runtime_error<M: ToString>(self, code: C, msg: M) -> PResult<T, C>;
-    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> PResult<T, C>;
+    fn map_to_invalid_input<M: ToString>(self, msg: M) -> Result<T, Error<C>>;
+    fn map_to_runtime_error<M: ToString>(self, code: C, msg: M) -> Result<T, Error<C>>;
+    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> Result<T, Error<C>>;
 }
 
 impl<T, E: ToString, C> MapToError<T, E, C> for Result<T, E> {
-    fn map_to_invalid_input<M: ToString>(self, msg: M) -> PResult<T, C> {
-        self.map_err(move |e| PError::InvalidInput {
+    fn map_to_invalid_input<M: ToString>(self, msg: M) -> Result<T, Error<C>> {
+        self.map_err(move |e| Error::InvalidInput {
             msg: format!("{}: {}", msg.to_string(), e.to_string()),
         })
     }
 
-    fn map_to_runtime_error<M: ToString>(self, code: C, msg: M) -> PResult<T, C> {
-        self.map_err(move |e| PError::RuntimeError {
+    fn map_to_runtime_error<M: ToString>(self, code: C, msg: M) -> Result<T, Error<C>> {
+        self.map_err(move |e| Error::RuntimeError {
             code,
             msg: format!("{}: {}", msg.to_string(), e.to_string()),
         })
     }
 
-    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> PResult<T, C> {
-        self.map_err(move |e| PError::PermanentFailure {
+    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> Result<T, Error<C>> {
+        self.map_err(move |e| Error::PermanentFailure {
             msg: format!("{}: {}", msg.to_string(), e.to_string()),
         })
     }
 }
 
 pub trait MapToErrorForUnitType<T, C> {
-    fn map_to_invalid_input<M: ToString>(self, msg: M) -> PResult<T, C>;
-    fn map_to_runtime_error<M: ToString>(self, code: C, msg: M) -> PResult<T, C>;
-    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> PResult<T, C>;
+    fn map_to_invalid_input<M: ToString>(self, msg: M) -> Result<T, Error<C>>;
+    fn map_to_runtime_error<M: ToString>(self, code: C, msg: M) -> Result<T, Error<C>>;
+    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> Result<T, Error<C>>;
 }
 
 impl<T, C> MapToErrorForUnitType<T, C> for Result<T, ()> {
-    fn map_to_invalid_input<M: ToString>(self, msg: M) -> PResult<T, C> {
-        self.map_err(move |()| PError::InvalidInput {
+    fn map_to_invalid_input<M: ToString>(self, msg: M) -> Result<T, Error<C>> {
+        self.map_err(move |()| Error::InvalidInput {
             msg: msg.to_string(),
         })
     }
 
-    fn map_to_runtime_error<M: ToString>(self, code: C, msg: M) -> PResult<T, C> {
-        self.map_err(move |()| PError::RuntimeError {
+    fn map_to_runtime_error<M: ToString>(self, code: C, msg: M) -> Result<T, Error<C>> {
+        self.map_err(move |()| Error::RuntimeError {
             code,
             msg: msg.to_string(),
         })
     }
 
-    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> PResult<T, C> {
-        self.map_err(move |()| PError::PermanentFailure {
+    fn map_to_permanent_failure<M: ToString>(self, msg: M) -> Result<T, Error<C>> {
+        self.map_err(move |()| Error::PermanentFailure {
             msg: msg.to_string(),
         })
     }
 }
 
 pub trait OptionToError<T> {
-    fn ok_or_invalid_input<M: ToString, C: Display + Debug + Eq>(self, msg: M) -> PResult<T, C>;
+    fn ok_or_invalid_input<M: ToString, C: Display + Debug + Eq>(
+        self,
+        msg: M,
+    ) -> Result<T, Error<C>>;
     fn ok_or_runtime_error<M: ToString, C: Display + Debug + Eq>(
         self,
         code: C,
         msg: M,
-    ) -> PResult<T, C>;
-    fn ok_or_permanent_failure<M: ToString, C: Display + Debug + Eq>(self, msg: M)
-        -> PResult<T, C>;
+    ) -> Result<T, Error<C>>;
+    fn ok_or_permanent_failure<M: ToString, C: Display + Debug + Eq>(
+        self,
+        msg: M,
+    ) -> Result<T, Error<C>>;
 }
 
 impl<T> OptionToError<T> for Option<T> {
-    fn ok_or_invalid_input<M: ToString, C: Display + Debug + Eq>(self, msg: M) -> PResult<T, C> {
+    fn ok_or_invalid_input<M: ToString, C: Display + Debug + Eq>(
+        self,
+        msg: M,
+    ) -> Result<T, Error<C>> {
         self.ok_or_else(|| invalid_input(msg))
     }
 
@@ -163,14 +169,14 @@ impl<T> OptionToError<T> for Option<T> {
         self,
         code: C,
         msg: M,
-    ) -> PResult<T, C> {
+    ) -> Result<T, Error<C>> {
         self.ok_or_else(|| runtime_error(code, msg))
     }
 
     fn ok_or_permanent_failure<M: ToString, C: Display + Debug + Eq>(
         self,
         msg: M,
-    ) -> PResult<T, C> {
+    ) -> Result<T, Error<C>> {
         self.ok_or_else(|| permanent_failure(msg))
     }
 }
@@ -193,9 +199,9 @@ mod tests {
 
     #[test]
     fn test_map_to_lipa_errors() {
-        use std::io::{Error, ErrorKind, Result};
+        use std::io::{Error, ErrorKind};
 
-        let io_error: Result<()> = Err(Error::new(ErrorKind::Other, "File not found"));
+        let io_error: std::io::Result<()> = Err(Error::new(ErrorKind::Other, "File not found"));
         let lipa_error = io_error
             .map_to_runtime_error(TestRuntimeErrorCode::RemoteServiceUnavailable, "No backup")
             .unwrap_err();
@@ -204,7 +210,7 @@ mod tests {
             "RuntimeError: RemoteServiceUnavailable - No backup: File not found"
         );
 
-        let error: std::result::Result<(), ()> = Err(());
+        let error: Result<(), ()> = Err(());
         let lipa_error = error
             .map_to_runtime_error(TestRuntimeErrorCode::RemoteServiceUnavailable, "No backup")
             .unwrap_err();
@@ -216,14 +222,14 @@ mod tests {
 
     #[test]
     fn test_lift_invalid_input() {
-        let result: PResult<(), TestRuntimeErrorCode> =
+        let result: Result<(), Error<TestRuntimeErrorCode>> =
             Err(invalid_input("Number must be positive")).lift_invalid_input();
         assert_eq!(
             result.unwrap_err().to_string(),
             "PermanentFailure: InvalidInput: Number must be positive"
         );
 
-        let result: PResult<(), TestRuntimeErrorCode> = Err(runtime_error(
+        let result: Result<(), Error<TestRuntimeErrorCode>> = Err(runtime_error(
             TestRuntimeErrorCode::RemoteServiceUnavailable,
             "Socket timeout",
         ))
@@ -233,7 +239,7 @@ mod tests {
             "RuntimeError: RemoteServiceUnavailable - Socket timeout"
         );
 
-        let result: PResult<(), TestRuntimeErrorCode> =
+        let result: Result<(), Error<TestRuntimeErrorCode>> =
             Err(permanent_failure("Devision by zero")).lift_invalid_input();
         assert_eq!(
             result.unwrap_err().to_string(),
@@ -243,7 +249,7 @@ mod tests {
 
     #[test]
     fn test_prefix_error() {
-        let result: PResult<(), TestRuntimeErrorCode> =
+        let result: Result<(), Error<TestRuntimeErrorCode>> =
             Err(invalid_input("Number must be positive")).prefix_error("Invalid amount");
         assert_eq!(
             result.unwrap_err().to_string(),
