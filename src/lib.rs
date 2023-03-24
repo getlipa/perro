@@ -192,7 +192,7 @@ mod tests {
 
     #[derive(Debug)]
     pub enum AnotherRuntimeErrorCode {
-        SubSytemFilure,
+        SubSystemFailure,
     }
 
     impl Display for AnotherRuntimeErrorCode {
