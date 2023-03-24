@@ -265,7 +265,7 @@ mod tests {
     fn test_map_runtime_error_to() {
         let result: Result<(), Error<TestRuntimeErrorCode>> =
             Err(invalid_input("Number must be positive"));
-        let result = result.map_runtime_error_to(AnotherRuntimeErrorCode::SubSytemFilure);
+        let result = result.map_runtime_error_to(AnotherRuntimeErrorCode::SubSystemFailure);
         assert_eq!(
             result.unwrap_err().to_string(),
             "InvalidInput: Number must be positive"
@@ -275,10 +275,10 @@ mod tests {
             TestRuntimeErrorCode::RemoteServiceUnavailable,
             "Socket timeout",
         ));
-        let result = result.map_runtime_error_to(AnotherRuntimeErrorCode::SubSytemFilure);
+        let result = result.map_runtime_error_to(AnotherRuntimeErrorCode::SubSystemFailure);
         assert_eq!(
             result.unwrap_err().to_string(),
-            "RuntimeError: SubSytemFilure - RemoteServiceUnavailable: Socket timeout"
+            "RuntimeError: SubSystemFailure - RemoteServiceUnavailable: Socket timeout"
         );
     }
 
