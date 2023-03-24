@@ -33,22 +33,22 @@ pub enum Error<C> {
     PermanentFailure { msg: String },
 }
 
-pub fn invalid_input<E: ToString, C: Display + Debug + Eq>(e: E) -> Error<C> {
+pub fn invalid_input<E: ToString, C: Display>(e: E) -> Error<C> {
     Error::InvalidInput { msg: e.to_string() }
 }
 
-pub fn runtime_error<E: ToString, C: Display + Debug + Eq>(code: C, e: E) -> Error<C> {
+pub fn runtime_error<E: ToString, C: Display>(code: C, e: E) -> Error<C> {
     Error::RuntimeError {
         code,
         msg: e.to_string(),
     }
 }
 
-pub fn permanent_failure<E: ToString, C: Display + Debug + Eq>(e: E) -> Error<C> {
+pub fn permanent_failure<E: ToString, C: Display>(e: E) -> Error<C> {
     Error::PermanentFailure { msg: e.to_string() }
 }
 
-pub trait ResultTrait<T, C> {
+pub trait ResultTrait<T, C: Display> {
     /// Lift `InvalidInput` error into `PermanentFailure`.
     ///
     /// Use the method when you want to propagate an error from an internal
@@ -61,7 +61,7 @@ pub trait ResultTrait<T, C> {
     fn prefix_error<M: ToString + 'static>(self, msg: M) -> Result<T, Error<C>>;
 }
 
-impl<T, C> ResultTrait<T, C> for Result<T, Error<C>> {
+impl<T, C: Display> ResultTrait<T, C> for Result<T, Error<C>> {
     fn lift_invalid_input(self) -> Result<T, Error<C>> {
         self.map_err(|e| match e {
             Error::InvalidInput { msg } => Error::PermanentFailure {
@@ -142,41 +142,21 @@ impl<T, C> MapToErrorForUnitType<T, C> for Result<T, ()> {
 }
 
 pub trait OptionToError<T> {
-    fn ok_or_invalid_input<M: ToString, C: Display + Debug + Eq>(
-        self,
-        msg: M,
-    ) -> Result<T, Error<C>>;
-    fn ok_or_runtime_error<M: ToString, C: Display + Debug + Eq>(
-        self,
-        code: C,
-        msg: M,
-    ) -> Result<T, Error<C>>;
-    fn ok_or_permanent_failure<M: ToString, C: Display + Debug + Eq>(
-        self,
-        msg: M,
-    ) -> Result<T, Error<C>>;
+    fn ok_or_invalid_input<M: ToString, C: Display>(self, msg: M) -> Result<T, Error<C>>;
+    fn ok_or_runtime_error<M: ToString, C: Display>(self, code: C, msg: M) -> Result<T, Error<C>>;
+    fn ok_or_permanent_failure<M: ToString, C: Display>(self, msg: M) -> Result<T, Error<C>>;
 }
 
 impl<T> OptionToError<T> for Option<T> {
-    fn ok_or_invalid_input<M: ToString, C: Display + Debug + Eq>(
-        self,
-        msg: M,
-    ) -> Result<T, Error<C>> {
+    fn ok_or_invalid_input<M: ToString, C: Display>(self, msg: M) -> Result<T, Error<C>> {
         self.ok_or_else(|| invalid_input(msg))
     }
 
-    fn ok_or_runtime_error<M: ToString, C: Display + Debug + Eq>(
-        self,
-        code: C,
-        msg: M,
-    ) -> Result<T, Error<C>> {
+    fn ok_or_runtime_error<M: ToString, C: Display>(self, code: C, msg: M) -> Result<T, Error<C>> {
         self.ok_or_else(|| runtime_error(code, msg))
     }
 
-    fn ok_or_permanent_failure<M: ToString, C: Display + Debug + Eq>(
-        self,
-        msg: M,
-    ) -> Result<T, Error<C>> {
+    fn ok_or_permanent_failure<M: ToString, C: Display>(self, msg: M) -> Result<T, Error<C>> {
         self.ok_or_else(|| permanent_failure(msg))
     }
 }
