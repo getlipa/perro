@@ -59,6 +59,8 @@ pub trait ResultTrait<T, C: Display> {
     fn lift_invalid_input(self) -> Result<T, Error<C>>;
 
     fn prefix_error<M: ToString + 'static>(self, msg: M) -> Result<T, Error<C>>;
+
+    fn map_runtime_error_to<C2>(self, c2: C2) -> Result<T, Error<C2>>;
 }
 
 impl<T, C: Display> ResultTrait<T, C> for Result<T, Error<C>> {
@@ -83,6 +85,17 @@ impl<T, C: Display> ResultTrait<T, C> for Result<T, Error<C>> {
             Error::PermanentFailure { msg } => Error::PermanentFailure {
                 msg: format!("{}: {}", prefix.to_string(), msg),
             },
+        })
+    }
+
+    fn map_runtime_error_to<C2>(self, c2: C2) -> Result<T, Error<C2>> {
+        self.map_err(|e| match e {
+            Error::InvalidInput { msg } => Error::<C2>::InvalidInput { msg },
+            Error::RuntimeError { code, msg } => {
+                let msg = format!("{code}: {msg}");
+                Error::<C2>::RuntimeError { code: c2, msg }
+            }
+            Error::PermanentFailure { msg } => Error::<C2>::PermanentFailure { msg },
         })
     }
 }
@@ -177,6 +190,17 @@ mod tests {
         }
     }
 
+    #[derive(Debug)]
+    pub enum AnotherRuntimeErrorCode {
+        SubSystemFailure,
+    }
+
+    impl Display for AnotherRuntimeErrorCode {
+        fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{self:?}")
+        }
+    }
+
     #[test]
     fn test_map_to_lipa_errors() {
         use std::io::{Error, ErrorKind};
@@ -234,6 +258,27 @@ mod tests {
         assert_eq!(
             result.unwrap_err().to_string(),
             "InvalidInput: Invalid amount: Number must be positive"
+        );
+    }
+
+    #[test]
+    fn test_map_runtime_error_to() {
+        let result: Result<(), Error<TestRuntimeErrorCode>> =
+            Err(invalid_input("Number must be positive"));
+        let result = result.map_runtime_error_to(AnotherRuntimeErrorCode::SubSytemFilure);
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "InvalidInput: Number must be positive"
+        );
+
+        let result: Result<(), Error<TestRuntimeErrorCode>> = Err(runtime_error(
+            TestRuntimeErrorCode::RemoteServiceUnavailable,
+            "Socket timeout",
+        ));
+        let result = result.map_runtime_error_to(AnotherRuntimeErrorCode::SubSytemFilure);
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "RuntimeError: SubSytemFilure - RemoteServiceUnavailable: Socket timeout"
         );
     }
 
