@@ -61,6 +61,10 @@ pub trait ResultTrait<T, C: Display> {
     fn prefix_error<M: ToString + 'static>(self, msg: M) -> Result<T, Error<C>>;
 
     fn map_runtime_error_to<C2>(self, c2: C2) -> Result<T, Error<C2>>;
+
+    fn map_runtime_error_using<C2, F>(self, f: F) -> Result<T, Error<C2>>
+    where
+        F: Fn(C) -> C2;
 }
 
 impl<T, C: Display> ResultTrait<T, C> for Result<T, Error<C>> {
@@ -94,6 +98,20 @@ impl<T, C: Display> ResultTrait<T, C> for Result<T, Error<C>> {
             Error::RuntimeError { code, msg } => {
                 let msg = format!("{code}: {msg}");
                 Error::<C2>::RuntimeError { code: c2, msg }
+            }
+            Error::PermanentFailure { msg } => Error::<C2>::PermanentFailure { msg },
+        })
+    }
+
+    fn map_runtime_error_using<C2, F>(self, f: F) -> Result<T, Error<C2>>
+    where
+        F: Fn(C) -> C2,
+    {
+        self.map_err(|e| match e {
+            Error::InvalidInput { msg } => Error::<C2>::InvalidInput { msg },
+            Error::RuntimeError { code, msg } => {
+                let msg = format!("{code}: {msg}");
+                Error::<C2>::RuntimeError { code: f(code), msg }
             }
             Error::PermanentFailure { msg } => Error::<C2>::PermanentFailure { msg },
         })
@@ -276,6 +294,31 @@ mod tests {
             "Socket timeout",
         ));
         let result = result.map_runtime_error_to(AnotherRuntimeErrorCode::SubSystemFailure);
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "RuntimeError: SubSystemFailure - RemoteServiceUnavailable: Socket timeout"
+        );
+    }
+
+    #[test]
+    fn test_map_runtime_error_using() {
+        let result: Result<(), Error<TestRuntimeErrorCode>> =
+            Err(invalid_input("Number must be positive"));
+        let result = result.map_runtime_error_to(AnotherRuntimeErrorCode::SubSystemFailure);
+        assert_eq!(
+            result.unwrap_err().to_string(),
+            "InvalidInput: Number must be positive"
+        );
+
+        let result: Result<(), Error<TestRuntimeErrorCode>> = Err(runtime_error(
+            TestRuntimeErrorCode::RemoteServiceUnavailable,
+            "Socket timeout",
+        ));
+        let result = result.map_runtime_error_using(|c| match c {
+            TestRuntimeErrorCode::RemoteServiceUnavailable => {
+                AnotherRuntimeErrorCode::SubSystemFailure
+            }
+        });
         assert_eq!(
             result.unwrap_err().to_string(),
             "RuntimeError: SubSystemFailure - RemoteServiceUnavailable: Socket timeout"
