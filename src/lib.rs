@@ -7,11 +7,13 @@
 //!     if x <= 10 {
 //!         return Err(invalid_input("x must be greater than 10"));
 //!     }
-//!     foreign_function().map_to_runtime_error("Foreign code failed")?;
+//!     foreign_function().map_to_runtime_error(RuntimeErrorCode::NoConnection, "Foreign code failed")?;
 //!     internal_function().prefix_error("Internal function failed")?;
 //!     another_internal_function().lift_invalid_input("Another failure")?;
 //! }
 //! ```
+
+mod macros;
 
 use std::fmt::{Debug, Display};
 
